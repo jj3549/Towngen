@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Town Generator</title>
+<style>
+  :root {
+    --bg: #1b1712;
+    --panel: #2a231b;
+    --border: #4a3c2a;
+    --text: #ead9bd;
+    --muted: #b8a888;
+    --accent: #c98f3d;
+    --accent-hover: #e0a94f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, 'Times New Roman', serif;
+    margin: 0;
+    padding: 2rem;
+  }
+  h1 {
+    text-align: center;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    margin-top: 0;
+  }
+  .tabs {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .tab-btn {
+    background: var(--panel);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 0.6rem 1.4rem;
+    font-size: 1rem;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #1b1712;
+    border-color: var(--accent);
+    font-weight: bold;
+  }
+  .panel {
+    display: none;
+    max-width: 700px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem 2rem;
+  }
+  .panel.active { display: block; }
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 1.25rem;
+  }
+  select, button.generate {
+    background: #211b14;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    font-family: inherit;
+    border-radius: 4px;
+  }
+  button.generate {
+    background: var(--accent);
+    color: #1b1712;
+    font-weight: bold;
+    cursor: pointer;
+    border-color: var(--accent);
+  }
+  button.generate:hover { background: var(--accent-hover); }
+  .results { line-height: 1.5; }
+  .results h2 {
+    color: var(--accent);
+    font-size: 1.3rem;
+    margin-bottom: 0.25rem;
+  }
+  .results .subline {
+    color: var(--muted);
+    font-style: italic;
+    margin-top: 0;
+    margin-bottom: 1rem;
+  }
+  .district {
+    border-left: 3px solid var(--border);
+    padding-left: 1rem;
+    margin-bottom: 1rem;
+  }
+  .district-name {
+    font-weight: bold;
+    color: var(--accent);
+  }
+  .district ul, .menu ul {
+    margin: 0.3rem 0 0 0;
+    padding-left: 1.2rem;
+  }
+  .menu h3 {
+    color: var(--accent);
+    font-size: 1.05rem;
+    margin-bottom: 0.25rem;
+  }
+  .empty {
+    color: var(--muted);
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<h1>Town Generator</h1>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="settlement">Settlement</button>
+  <button class="tab-btn" data-tab="taverns">Taverns</button>
+  <button class="tab-btn" data-tab="shops">Shops</button>
+</div>
+
+<div id="settlement" class="panel active">
+  <div class="controls">
+    <button class="generate" onclick="generateSettlement()">Generate</button>
+  </div>
+  <div id="settlement-results" class="results"><p class="empty">Click Generate to create a settlement.</p></div>
+</div>
+
+<div id="taverns" class="panel">
+  <div class="controls">
+    <select id="tavern-tier">
+      <option value="Poor">Poor</option>
+      <option value="Standard" selected>Standard</option>
+      <option value="Wealthy">Wealthy</option>
+    </select>
+    <button class="generate" onclick="generateTavern()">Generate</button>
+  </div>
+  <div id="tavern-results" class="results"><p class="empty">Click Generate to create a tavern.</p></div>
+</div>
+
+<div id="shops" class="panel">
+  <div class="controls">
+    <select id="shop-tier">
+      <option value="Poor">Poor</option>
+      <option value="Standard" selected>Standard</option>
+      <option value="Wealthy">Wealthy</option>
+    </select>
+    <button class="generate" onclick="generateShop()">Generate</button>
+  </div>
+  <div id="shop-results" class="results"><p class="empty">Click Generate to create a shop.</p></div>
+</div>
+
+<script>
+/* ---------- utility ---------- */
+function rollDie(sides) { return Math.floor(Math.random() * sides) + 1; }
+function rollRange(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ---------- Settlement data ---------- */
+const DISTRICT_COUNTS = {
+  Village: 3,
+  Town: 4,
+  City: 6,
+  Metropolis: 8
+};
+
+const DISTRICT_TYPES = {
+  1: 'Slums',
+  2: 'Low District',
+  3: 'Artisan District',
+  4: 'Market',
+  5: 'High District',
+  6: 'Temple District',
+  7: 'University District',
+  8: 'Castle District'
+};
+
+function buildingFromD6(districtType, roll) {
+  const tables = {
+    'Slums': { 1:'Seedy flophouse', 2:'Poor tavern', 3:'Poor tavern', 4:'Criminal Safehouse', 5:'Poor shop', 6:"Witch/warlock's hovel" },
+    'High District': { 1:'Guildhouse', 2:'Wealthy Tavern', 3:'Wealthy Tavern', 4:'Manor House', 5:'Wealthy shop', 6:'City Watch outpost' },
+    'Low District': { 1:'Graveyard', 2:'Poor Tavern', 3:'Poor Tavern', 4:'Poor shop', 5:'Standard shop', 6:'Warehouses/sheds' },
+    'Temple District': { 1:'Ruined Temple', 2:"Minor Deity's Temple", 3:"Minor Deity's Temple", 4:'Forbidden Shrine', 5:"Major God's Temple", 6:'Revered holy site' },
+    'Artisan District': { 1:'Stocks and Pillories', 2:'Modest Temple', 3:'Modest Temple', 4:'Standard tavern', 5:'Standard tavern', 6:'Wealthy shop' },
+    'University District': { 1:'Library', 2:'Lecture hall', 3:'Lecture hall', 4:'Standard tavern', 5:'Standard tavern', 6:"Wizard's Tower" },
+    'Market': { 1:'Fortune teller', 2:'Rare and exotic goods', 3:'Rare and exotic goods', 4:'Rare and exotic goods', 5:'Apothecary', 6:'Illicit black market' },
+    'Castle District': { 1:'Royal bathhouse', 2:'City watch garrison', 3:'City watch garrison', 4:'Theater or coliseum', 5:'Theater or coliseum', 6:'Royal castle' }
+  };
+  return tables[districtType][roll];
+}
+
+function generateSettlement() {
+  const typeRoll = rollDie(6);
+  let type;
+  if (typeRoll === 1) type = 'Village';
+  else if (typeRoll === 2 || typeRoll === 3) type = 'Town';
+  else if (typeRoll === 4 || typeRoll === 5) type = 'City';
+  else type = 'Metropolis';
+
+  const numDistricts = DISTRICT_COUNTS[type];
+
+  const districts = [];
+  for (let i = 0; i < numDistricts; i++) {
+    const dTypeRoll = rollDie(8);
+    const dType = DISTRICT_TYPES[dTypeRoll];
+    const numBuildings = rollDie(4);
+    const buildings = [];
+    for (let b = 0; b < numBuildings; b++) {
+      buildings.push(buildingFromD6(dType, rollDie(6)));
+    }
+    districts.push({ type: dType, buildings });
+  }
+
+  let html = `<h2>${type}</h2>`;
+  html += `<p class="subline"># of Districts: ${numDistricts}</p>`;
+  districts.forEach((d, idx) => {
+    html += `<div class="district"><div class="district-name">${idx + 1}. ${d.type}</div><ul>`;
+    d.buildings.forEach(b => { html += `<li>${b}</li>`; });
+    html += `</ul></div>`;
+  });
+
+  document.getElementById('settlement-results').innerHTML = html;
+}
+
+/* ---------- Tavern data ---------- */
+const TAVERN_NAME_PART1 = [
+  'The Crimson','The Dancing','The Dog &','The Rusty',"The Demon's",'The Singing','The Boar &','The Silver',
+  'The Filthy',"The Captain's",'The Jolly','The Wise','Cloak &','The Royal','The Gilded','The Blade &',
+  'The Drunken','Cup &','The Jeweled','The Frog &'
+];
+const TAVERN_NAME_PART2 = [
+  'Rat','Wench','Lantern','Eel','Goblet','Trident','Candle','Dagger','Wheel','Pig',
+  'Snake','Camel','Dragon','Axe','Bell','Tankard','Shield','Blade','Anvil','Bard'
+];
+const TAVERN_KNOWN_FOR = [
+  'High-stakes gambling','Illicit poison sales','Wizard patrons','Cult rituals in the basement','Rare food and drinks',
+  'Dancing contests','Violent brawls','Ancient tunnels in the cellar','Thugs for hire',"Thieves' Guild spies",
+  'Hostility toward spellcasters','City Watch patrons','Underground pit fighting','Famous bard performances','Treasonous meetings',
+  'Ban on all weapons','Hostility toward non-regulars','Exotic taxidermy collection','Pirate and smuggler patrons','Drinking contests'
+];
+
+const POOR_FOODS = [
+  'Boiled Cabbage','Dates and Olives','Goat stew','Pickled eggs','Cheese and bread','Hearty broth',
+  'Meat pastry','Mushroom kebab','Roasted pigeon','Garlic flatbread','Turkey leg','Rat-on-a-stick'
+];
+const STANDARD_FOODS = [
+  'Alligator steak','Rosemary ham','Raw flailfish','Seared venison','Buttered ostrich','Spicy veal curry',
+  'Salted frog legs','Herbed snails','Grilled tiger eel','Spit roasted boar','Saffron duck neck','Crimson pudding'
+];
+const WEALTHY_FOODS = [
+  'Fried basilisk eyes','Giant snake filet','Griffon eggs','Candied scarabs','Baked troll bones','Cockatrice wings',
+  'Crispy silkworms','Roasted stingbat','Dire lobster tail','Wyvern tongue','Shrieking seaweed','Dragon shanks'
+];
+
+const DRINKS = [
+  { name: 'Barnacle Grog', price: '1 cp', effect: 'DC 9 CON check or blind 1 hr' },
+  { name: 'Watered-down swill', price: '3 cp', effect: 'toxic, -1 CON 1 hr' },
+  { name: 'Vinegary wine', price: '5 cp', effect: 'stains teeth purple, -1 CHA 1 hr' },
+  { name: 'Stale ale', price: '5 cp', effect: 'dulls the senses, -1 WIS 1 hr' },
+  { name: 'Clear spirits', price: '1 sp', effect: 'burns, ends 1 bad effect of another drink' },
+  { name: 'House ale', price: '2 sp', effect: 'crisp and clean, first mug is free' },
+  { name: 'Autumn mead', price: '3 sp', effect: 'floral, doubles effect of next drink' },
+  { name: 'Halfling summer wine', price: '5 sp', effect: 'sparkling, +1 CHA 1 hr' },
+  { name: 'Elvish Brandy', price: '5 sp', effect: 'spiced, +1 INT 1 hr' },
+  { name: 'Dwarvish gold ale', price: '5 sp', effect: 'icy cold, regain 1d4 hp per mug' },
+  { name: 'Aged royal wine', price: '2 gp', effect: 'smooth and rich, +1 WIS 1 hr' },
+  { name: 'Van Dinkle Whiskey', price: '20 gp a sip', effect: 'only 5 bottles made, +1 XP' }
+];
+
+function foodEntry(name, tier) {
+  if (tier === 'Poor') return { name, price: `${rollDie(4)} cp` };
+  if (tier === 'Standard') return { name, price: `${rollDie(6)} sp` };
+  return { name, price: `${rollDie(8)} gp` };
+}
+
+function generateTavern() {
+  const tier = document.getElementById('tavern-tier').value;
+
+  const name = `${pick(TAVERN_NAME_PART1)} ${pick(TAVERN_NAME_PART2)}`;
+  const knownFor = pick(TAVERN_KNOWN_FOR);
+
+  const foods = [];
+  const drinks = [];
+
+  if (tier === 'Poor') {
+    for (let i = 0; i < 3; i++) foods.push(foodEntry(pick(POOR_FOODS), 'Poor'));
+    for (let i = 0; i < 2; i++) drinks.push(DRINKS[rollDie(6) - 1]);
+  } else if (tier === 'Standard') {
+    foods.push(foodEntry(pick(POOR_FOODS), 'Poor'));
+    for (let i = 0; i < 2; i++) foods.push(foodEntry(pick(STANDARD_FOODS), 'Standard'));
+    for (let i = 0; i < 3; i++) drinks.push(DRINKS[rollRange(2, 12) - 1]);
+  } else {
+    for (let i = 0; i < 2; i++) foods.push(foodEntry(pick(STANDARD_FOODS), 'Standard'));
+    for (let i = 0; i < 2; i++) foods.push(foodEntry(pick(WEALTHY_FOODS), 'Wealthy'));
+    for (let i = 0; i < 4; i++) drinks.push(DRINKS[rollDie(12) - 1]);
+  }
+
+  let html = `<h2>${name}</h2>`;
+  html += `<p class="subline">Known for: ${knownFor}</p>`;
+  html += `<div class="menu"><h3>Food</h3><ul>`;
+  foods.forEach(f => { html += `<li>${f.name} — ${f.price}</li>`; });
+  html += `</ul><h3>Drink</h3><ul>`;
+  drinks.forEach(d => { html += `<li>${d.name} (${d.price}) — ${d.effect}</li>`; });
+  html += `</ul></div>`;
+
+  document.getElementById('tavern-results').innerHTML = html;
+}
+
+/* ---------- Shop data ---------- */
+const POOR_SHOPS = [
+  'Filthy bakery','Used adventuring gear','Dead body collector','Pawn shop/fence','Moneylender','Manure collector',
+  'Tannery','Back-alley surgeon','Ratcatcher','Fishmonger','Gambling house','Drug den'
+];
+const STANDARD_SHOPS = [
+  'Brewer','Butcher','Tailor','Common blacksmith','Adventuring gear','Leatherworker','Shipwright/carpenter',
+  'Stonemason','Herald/town crier','Livestock'
+];
+const WEALTHY_SHOPS = [
+  'Fine tailor','Glassblower','Jeweler','Apothecary','Artist','Scribe','Guildhall','Goldsmith','Master blacksmith','Antiques and curios'
+];
+
+const SHOP_NAME_PART1 = [
+  'Fink &','Imperial','The Stout',"Rose's","The King's",'Fox &','Noble',"Sylvia's",'Sunrise','The Corner',
+  "Grigor's",'Royal','Crown &',"Ralina's",'The Village','Golden','Boot &',"Marvolo's",'The Merry','The Jade'
+];
+const SHOP_NAME_PART2 = [
+  'Sons','Toad','Hammer','Commodities','Daughters','Sundries','Castle','Finery','Oddments','Beetle',
+  'Storehouse','Keep','Coins','Hearth','Wheel','Wares','Market','Lantern','Vendibles','Stocks'
+];
+const SHOP_KNOWN_FOR = [
+  'Ancient, beloved owner','Buying anything of value','Charging non-regulars extra',"Being a Thieves' Guild front",
+  'Resident cat, Crumpet','Password required to enter','Free ale with a purchase','Heavily armed bodyguards',
+  'Paying top coin for curios','Secret room behind shelf','Fencing illicit goods','Ringing a gong at every sale',
+  'Goods from distant lands','Shoddy and cheap items','Accusing customers of theft','All goods are dyed blue',
+  "Owner's talking parrot",'Famous bronze imp statue','Being haunted','Aggressive rodent problem'
+];
+
+const CUSTOMER_TABLE = {
+  1: { 1: 'Odd wizard', 2: null, 3: 'Cackling crone', 4: 'Loud dwarf' },
+  2: { 1: 'Nervous elf', 2: 'Shifty thug', 3: 'Town guard', 4: null },
+  3: { 1: 'Goblin pirate', 2: 'Cowled mage', 3: 'Half-orc knight', 4: 'Drunk man' },
+  4: { 1: 'Staring child', 2: 'Rival crawlers', 3: 'Glum halfling', 4: 'Pickpocket' }
+};
+
+function generateShop() {
+  const tier = document.getElementById('shop-tier').value;
+
+  let shopType;
+  if (tier === 'Poor') shopType = pick(POOR_SHOPS);
+  else if (tier === 'Standard') shopType = pick(STANDARD_SHOPS);
+  else shopType = pick(WEALTHY_SHOPS);
+
+  const name = `${pick(SHOP_NAME_PART1)} ${pick(SHOP_NAME_PART2)}`;
+  const knownFor = pick(SHOP_KNOWN_FOR);
+
+  const row = rollDie(4);
+  const col = rollDie(4);
+  let customer;
+  if (row === 1 && col === 2) customer = `${rollDie(10)} children`;
+  else if (row === 2 && col === 4) customer = `${rollDie(4)} priests`;
+  else customer = CUSTOMER_TABLE[row][col];
+
+  let html = `<h2>${name}</h2>`;
+  html += `<p class="subline">${shopType} — Known for: ${knownFor}</p>`;
+  html += `<p>Interesting customer: <strong>${customer}</strong></p>`;
+
+  document.getElementById('shop-results').innerHTML = html;
+}
+
+/* ---------- tab switching ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+</script>
+
+</body>
+</html>
